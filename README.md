@@ -1,0 +1,213 @@
+# graphql-mcp-tools
+
+Generate [MCP](https://modelcontextprotocol.io/) tool definitions from your GraphQL operations. Annotate queries and mutations with `@mcpTool`, run codegen, get type-safe tools with JSON Schema inputs derived from your GraphQL schema.
+
+## How it works
+
+1. Mark GraphQL operations with `@mcpTool` and `@mcpToolVariable` directives
+2. Run [GraphQL Code Generator](https://the-guild.dev/graphql/codegen) — the included document transform filters to `@mcpTool` operations and generates persisted documents
+3. A codegen plugin reads the persisted documents, converts GraphQL types to JSON Schema, and outputs typed tool definitions
+4. At runtime, a thin wrapper turns each generated tool into an executable MCP tool handler
+
+## Quick start
+
+Clone the repo and install dependencies:
+
+```bash
+git clone https://github.com/labd/graphql-mcp-tools.git
+cd graphql-mcp-tools
+pnpm install
+```
+
+Run the example codegen to see it in action:
+
+```bash
+pnpm codegen
+```
+
+This generates `example/generated/mcp-tools.generated.ts` from the example schema and operations in `example/`.
+
+To try the MCP server (requires a GraphQL server running on `localhost:4000`):
+
+```bash
+pnpm example
+```
+
+### Using it in your own project
+
+Copy or adapt the files from this repo into your project. The key pieces are:
+
+| What | Where |
+|------|-------|
+| Directives | `src/directives.graphql` |
+| Document transform | `src/codegen/document-transform.ts` |
+| Tools codegen plugin | `src/codegen/tools-plugin.ts` |
+| Directive stripping | `src/codegen/strip-directives.ts` |
+| Runtime tool wrapper | `src/runtime/create-tools.ts` |
+
+You'll also need these dependencies:
+
+```bash
+pnpm add @modelcontextprotocol/sdk change-case graphql
+pnpm add -D @graphql-codegen/cli @graphql-codegen/client-preset @graphql-codegen/plugin-helpers
+```
+
+### 1. Add the directives file
+
+Copy `src/directives.graphql` into your project:
+
+```graphql
+directive @mcpTool(
+  description: String!
+  exclude: Boolean = false
+) on QUERY | MUTATION
+
+directive @mcpToolVariable(description: String) on VARIABLE_DEFINITION
+```
+
+### 2. Write your operations
+
+```graphql
+query GetProducts(
+  $searchTerm: String
+    @mcpToolVariable(description: "Free-text search query")
+  $pageSize: Int!
+    @mcpToolVariable(description: "Number of products per page")
+  $page: Int!
+    @mcpToolVariable(description: "Page number, starting at 1")
+) @mcpTool(description: "Search products in the catalog") {
+  productSearch(searchTerm: $searchTerm, pageSize: $pageSize, page: $page) {
+    total
+    results { name variant { sku price { gross { centAmount currency } } } }
+  }
+}
+```
+
+### 3. Configure codegen
+
+See `example/codegen.ts` for a working config. The two key pieces are:
+
+1. Use `mcpToolTransform` as a document transform to filter operations
+2. Use `src/codegen/tools-plugin.ts` as a plugin to generate tool definitions from persisted documents
+
+```typescript
+// codegen.ts
+import type { CodegenConfig } from "@graphql-codegen/cli";
+import { mcpToolTransform } from "./src/codegen/index.js";
+
+const config: CodegenConfig = {
+  schema: [
+    "./schema.graphql",         // your schema
+    "./src/directives.graphql", // MCP directives
+  ],
+  generates: {
+    "./generated/": {
+      documents: ["./operations.graphql"],
+      preset: "client",
+      documentTransforms: [mcpToolTransform],
+      presetConfig: {
+        persistedDocuments: {
+          mode: "embedHashInDocument",
+          hashPropertyName: "documentId",
+        },
+      },
+    },
+    "./generated/mcp-tools.generated.ts": {
+      plugins: ["graphql-mcp-tools/codegen/tools"],
+      config: {
+        persistedDocumentsPath: "./generated/persisted-documents.json",
+      },
+    },
+  },
+};
+
+export default config;
+```
+
+### 4. Run codegen
+
+```bash
+pnpm graphql-codegen --config codegen.ts
+```
+
+This generates `mcp-tools.generated.ts` with typed tool definitions and `persisted-documents.json` for use with your GraphQL server's operation registry.
+
+### 5. Wire up an MCP server
+
+See `example/server.ts` for a full working example. The gist:
+
+```typescript
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { createToolFromGenerated } from "./src/runtime/index.js";
+import { generatedMcpTools } from "./generated/mcp-tools.generated.js";
+
+const executor = async (query, variables, documentId) => {
+  const res = await fetch("http://localhost:4000/graphql", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, variables }),
+  });
+  const { data, errors } = await res.json();
+  if (errors?.length) throw new Error(JSON.stringify(errors));
+  return data;
+};
+
+const server = new McpServer({ name: "my-mcp-server", version: "0.1.0" });
+
+const tools = generatedMcpTools.map((t) => createToolFromGenerated(t, executor));
+
+for (const tool of tools) {
+  server.tool(tool.name, tool.description, tool.inputSchema, async (args) => ({
+    content: [{ type: "text", text: JSON.stringify(await tool.handler(args), null, 2) }],
+  }));
+}
+
+await server.connect(new StdioServerTransport());
+```
+
+## Connecting to Claude
+
+The example server runs as a remote MCP server over HTTP. Start it with `pnpm example` and it will print the configuration you need:
+
+```
+MCP server running with 5 tools
+
+Add this to your Claude Desktop config:
+
+{
+  "mcpServers": {
+    "my-graphql-mcp": {
+      "type": "url",
+      "url": "http://localhost:3001/mcp"
+    }
+  }
+}
+
+Or test with: npx @modelcontextprotocol/inspector --transport streamableHttp http://localhost:3001/mcp
+```
+
+The port defaults to `3001` and can be changed via the `PORT` environment variable.
+
+## Persisted documents
+
+The codegen outputs `persisted-documents.json` mapping content hashes to query strings. You can register these with your GraphQL server's operation registry (GraphQL Hive, Apollo's persisted queries, or a custom solution) to reject any query not in the allowlist. This ensures the AI can only execute operations you've explicitly approved.
+
+## API
+
+### Codegen (`src/codegen/`)
+
+- **`mcpToolTransform`** — Document transform that filters to `@mcpTool` operations
+- **`plugin`** (in `tools-plugin.ts`) — Codegen plugin that generates tool definitions from persisted documents
+- **`stripMcpDirectives(query)`** — Strips `@mcpTool` / `@mcpToolVariable` from a query string
+
+### Runtime (`src/runtime/`)
+
+- **`createToolFromGenerated(tool, executor)`** — Wraps a generated tool with an executor function
+- **`GeneratedMCPTool`** — Type for generated tool definitions
+- **`ExecutableMCPTool`** — Type for tools with a handler
+- **`GraphQLExecutor`** — Type for the executor function `(query, variables, documentId) => Promise<unknown>`
+
+## License
+
+MIT

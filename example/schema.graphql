@@ -1,0 +1,108 @@
+# Example schema — replace with your own or point codegen at your gateway's schema.
+
+enum ProductSortOrder {
+	"""Sort by relevance"""
+	relevance
+	"""Sort by price ascending"""
+	price_asc
+	"""Sort by price descending"""
+	price_desc
+	"""Sort by name A-Z"""
+	name_asc
+}
+
+input FacetFilterInput {
+	key: String!
+	values: [String!]!
+}
+
+type Money {
+	centAmount: Int!
+	currency: String!
+}
+
+type Price {
+	gross: Money!
+	net: Money!
+}
+
+type ProductVariant {
+	sku: String!
+	name: String!
+	availability: String
+	price: Price!
+}
+
+type Product {
+	slug: String!
+	name: String!
+	description: String
+	variant: ProductVariant!
+}
+
+type FacetOption {
+	key: String!
+	label: String!
+	count: Int!
+}
+
+type Facet {
+	key: String!
+	label: String!
+	options: [FacetOption!]!
+}
+
+type ProductSearchResult {
+	total: Int!
+	results: [Product!]!
+	facets: [Facet!]!
+}
+
+input CartLineItemInput {
+	sku: String!
+	quantity: Int!
+}
+
+type CartLineItem {
+	id: ID!
+	quantity: Int!
+	variant: ProductVariant!
+}
+
+type Cart {
+	id: ID!
+	lineItems: [CartLineItem!]!
+	totalPrice: Money!
+}
+
+type CartResult {
+	cart: Cart
+	errors: [String!]
+}
+
+type Query {
+	productSearch(
+		sort: ProductSortOrder!
+		filters: [FacetFilterInput!]
+		searchTerm: String
+		pageSize: Int!
+		page: Int!
+	): ProductSearchResult!
+
+	product(slug: String!): Product
+
+	cart: Cart
+}
+
+type Mutation {
+	cartAddLineItems(
+		"""Cart ID — get this from the cart query first"""
+		cartId: ID!
+		lineItems: [CartLineItemInput!]!
+	): CartResult!
+
+	cartRemoveLineItems(
+		cartId: ID!
+		lineItemIds: [String!]!
+	): CartResult!
+}

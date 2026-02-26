@@ -1,0 +1,121 @@
+# Operations annotated with @mcpTool become MCP tools after codegen.
+# Operations without @mcpTool are ignored.
+
+query GetProducts(
+	$sort: ProductSortOrder!
+		@mcpToolVariable(description: "Sort order, e.g. 'relevance'")
+	$filters: [FacetFilterInput!]
+		@mcpToolVariable(description: "Filters like category or brand")
+	$searchTerm: String
+		@mcpToolVariable(description: "Free-text search query")
+	$pageSize: Int!
+		@mcpToolVariable(description: "Number of products per page, e.g. 24")
+	$page: Int!
+		@mcpToolVariable(description: "Page number, starting at 1")
+) @mcpTool(description: "Search products with filters and sorting") {
+	productSearch(
+		sort: $sort
+		filters: $filters
+		searchTerm: $searchTerm
+		pageSize: $pageSize
+		page: $page
+	) {
+		total
+		results {
+			slug
+			name
+			variant {
+				sku
+				name
+				availability
+				price {
+					gross { centAmount currency }
+				}
+			}
+		}
+		facets {
+			key
+			label
+			options { key label count }
+		}
+	}
+}
+
+query GetProductDetail(
+	$slug: String! @mcpToolVariable(description: "Product slug / URL identifier")
+) @mcpTool(description: "Get full product details by slug") {
+	product(slug: $slug) {
+		name
+		description
+		variant {
+			sku
+			name
+			availability
+			price {
+				gross { centAmount currency }
+				net { centAmount currency }
+			}
+		}
+	}
+}
+
+query GetCart
+@mcpTool(
+	description: "Get the current cart. Call this FIRST before any cart mutations to get the cart ID."
+) {
+	cart {
+		id
+		lineItems {
+			id
+			quantity
+			variant { sku name }
+		}
+		totalPrice { centAmount currency }
+	}
+}
+
+mutation AddToCart(
+	$cartId: ID!
+		@mcpToolVariable(
+			description: "Cart ID. Call get_cart first to retrieve this."
+		)
+	$lineItems: [CartLineItemInput!]!
+		@mcpToolVariable(
+			description: "Items to add. Each needs 'sku' and 'quantity'."
+		)
+)
+@mcpTool(
+	description: "Add products to the cart. Call get_cart first to get the cart ID."
+) {
+	cartAddLineItems(cartId: $cartId, lineItems: $lineItems) {
+		cart {
+			id
+			lineItems {
+				id
+				quantity
+				variant { sku name }
+			}
+		}
+		errors
+	}
+}
+
+mutation RemoveFromCart(
+	$cartId: ID!
+		@mcpToolVariable(description: "Cart ID from get_cart")
+	$lineItemIds: [String!]!
+		@mcpToolVariable(description: "IDs of line items to remove")
+)
+@mcpTool(description: "Remove items from the cart") {
+	cartRemoveLineItems(cartId: $cartId, lineItemIds: $lineItemIds) {
+		cart {
+			id
+			lineItems {
+				id
+				quantity
+				variant { sku name }
+			}
+		}
+		errors
+	}
+}

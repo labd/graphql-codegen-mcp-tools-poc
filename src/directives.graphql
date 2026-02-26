@@ -1,0 +1,6 @@
+directive @mcpTool(
+	description: String!
+	exclude: Boolean = false # To exclude from generated MCP tools.
+) on QUERY | MUTATION
+
+directive @mcpToolVariable(description: String) on VARIABLE_DEFINITION
