@@ -16,7 +16,7 @@ This repo is the companion code for the blog post [Generating MCP tools from you
 Clone the repo and install dependencies:
 
 ```bash
-git clone https://github.com/labd/graphql-mcp-tools.git
+git clone https://github.com/labd/graphql-codegen-mcp-tools.git
 cd graphql-mcp-tools
 pnpm install
 ```

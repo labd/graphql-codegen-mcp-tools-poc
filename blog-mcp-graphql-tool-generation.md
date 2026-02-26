@@ -8,7 +8,7 @@ We took a different approach. Our composable commerce platform already has a Gra
 
 Adding a new tool for an AI assistant is now a one-line directive. The codegen pipeline handles type conversion, input validation schemas, and persisted document hashing. And because the AI can only execute pre-registered queries, we get the same level of control we have over our frontend clients.
 
-We've open-sourced the codegen tooling as [`graphql-mcp-tools`](https://github.com/labd/graphql-mcp-tools). Clone the repo, point it at your schema, and you're up and running.
+We've open-sourced the codegen tooling as [`graphql-codegen-mcp-tools`](https://github.com/labd/graphql-codegen-mcp-tools). Clone the repo, point it at your schema, and you're up and running.
 
 ## The architecture
 
@@ -42,7 +42,7 @@ The MCP service sits in front of the same GraphQL server your frontend uses. No 
 
 ## Step 1: Define your directives
 
-Two custom GraphQL directives are all you need:
+Two custom GraphQL directives are all you need (see [`src/directives.graphql`](https://github.com/labd/graphql-codegen-mcp-tools/blob/main/src/directives.graphql) in the repo):
 
 ```graphql
 directive @mcpTool(
@@ -61,7 +61,7 @@ Both directives are defined in a `.graphql` file that you feed to codegen alongs
 
 ## Step 2: Annotate your GraphQL operations
 
-You write standard GraphQL operations and annotate them:
+You write standard GraphQL operations and annotate them. The repo has a complete [example with five operations](https://github.com/labd/graphql-codegen-mcp-tools/blob/main/example/operations.graphql) — here's one:
 
 ```graphql
 query GetProducts(
@@ -139,7 +139,7 @@ These descriptions guide the LLM to call tools in the right order with the right
 
 ## Step 3: The codegen pipeline
 
-Build time is where the pieces come together. We use [GraphQL Code Generator](https://the-guild.dev/graphql/codegen) with a custom document transform and plugin, both included in [`graphql-mcp-tools`](https://github.com/labd/graphql-mcp-tools). The pipeline does three things:
+Build time is where the pieces come together. We use [GraphQL Code Generator](https://the-guild.dev/graphql/codegen) with a custom document transform and plugin, both included in [`graphql-codegen-mcp-tools`](https://github.com/labd/graphql-codegen-mcp-tools). The pipeline does three things:
 
 1. **Filter** — A document transform walks your operations and keeps only the ones marked `@mcpTool`, along with any fragments they depend on. Everything else is discarded. Your `operations.graphql` can mix tool-exposed operations with internal ones (token refresh, session management) — only `@mcpTool` operations make it through.
 
@@ -190,7 +190,7 @@ export const generatedMcpTools: GeneratedMCPTool[] = [
 ];
 ```
 
-Tool names are derived from operation names (`GetProducts` → `get_products`). Descriptions come from the directive. The `documentId` is the persisted document hash for registry lookups at runtime, and `queryString` is the full query with MCP directives stripped out. The source code for the transform, plugin, and type resolver is all in the repo — have a look at `src/codegen/` if you want the details.
+Tool names are derived from operation names (`GetProducts` → `get_products`). Descriptions come from the directive. The `documentId` is the persisted document hash for registry lookups at runtime, and `queryString` is the full query with MCP directives stripped out. The source code for the [document transform](https://github.com/labd/graphql-codegen-mcp-tools/blob/main/src/codegen/document-transform.ts), [tools plugin](https://github.com/labd/graphql-codegen-mcp-tools/blob/main/src/codegen/tools-plugin.ts), and type resolver is all in the repo if you want the details.
 
 ## Step 4: Runtime
 
@@ -220,7 +220,7 @@ The executor receives the query string, the variables the LLM provided, and the 
 
 ### Wiring up the MCP server
 
-The example repo runs a stateless Streamable HTTP server. Each incoming request gets a fresh `McpServer` instance, which keeps things simple and avoids session state management:
+The [example server](https://github.com/labd/graphql-codegen-mcp-tools/blob/main/example/server.ts) runs a stateless Streamable HTTP server. Each incoming request gets a fresh `McpServer` instance, which keeps things simple and avoids session state management:
 
 ```typescript
 import { createServer } from "node:http";
@@ -334,11 +334,11 @@ This works just as well with a non-federated GraphQL server. You just point your
 
 ## Getting started
 
-Clone the [`graphql-mcp-tools`](https://github.com/labd/graphql-mcp-tools) repo and try it end-to-end in under a minute:
+Clone the [`graphql-codegen-mcp-tools`](https://github.com/labd/graphql-codegen-mcp-tools) repo and try it end-to-end in under a minute:
 
 ```bash
-git clone https://github.com/labd/graphql-mcp-tools.git
-cd graphql-mcp-tools
+git clone https://github.com/labd/graphql-codegen-mcp-tools.git
+cd graphql-codegen-mcp-tools
 pnpm install
 pnpm codegen
 pnpm example
