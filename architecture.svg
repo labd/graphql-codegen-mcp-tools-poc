@@ -22,7 +22,7 @@
   <!-- MCP Server -->
   <rect class="box" x="220" y="156" width="280" height="72" fill="#ffffff" stroke="#e5e5e5"/>
   <text class="label" x="360" y="186" text-anchor="middle">MCP Server</text>
-  <text class="sublabel" x="360" y="206" text-anchor="middle">Generated tools &middot; JSON Schema validation</text>
+  <text class="sublabel" x="360" y="206" text-anchor="middle">Generated tools &#xB7; JSON Schema validation</text>
 
   <!-- Connector 2 -->
   <line class="arrow" x1="360" y1="228" x2="360" y2="284"/>
