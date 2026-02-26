@@ -2,6 +2,8 @@
 
 Generate [MCP](https://modelcontextprotocol.io/) tool definitions from your GraphQL operations. Annotate queries and mutations with `@mcpTool`, run codegen, get type-safe tools with JSON Schema inputs derived from your GraphQL schema.
 
+This repo is the companion code for the blog post [Generating MCP tools from your GraphQL schema](https://labdigital.nl/blog/generating-mcp-tools-from-graphql). The article walks through the architecture, codegen pipeline, and safety model in detail. The code here is everything you need to try it yourself.
+
 ## How it works
 
 1. Mark GraphQL operations with `@mcpTool` and `@mcpToolVariable` directives
@@ -27,7 +29,7 @@ pnpm codegen
 
 This generates `example/generated/mcp-tools.generated.ts` from the example schema and operations in `example/`.
 
-To try the MCP server (requires a GraphQL server running on `localhost:4000`):
+To try the MCP server (uses mock data, no backend required):
 
 ```bash
 pnpm example
@@ -134,15 +136,18 @@ This generates `mcp-tools.generated.ts` with typed tool definitions and `persist
 
 ### 5. Wire up an MCP server
 
-See `example/server.ts` for a full working example. The gist:
+See `example/server.ts` for a full working example with mock data. The key parts:
 
 ```typescript
+import { createServer } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createToolFromGenerated } from "./src/runtime/index.js";
+import type { GraphQLExecutor } from "./src/runtime/index.js";
 import { generatedMcpTools } from "./generated/mcp-tools.generated.js";
 
-const executor = async (query, variables, documentId) => {
+// Replace with a real fetch to your GraphQL server
+const executor: GraphQLExecutor = async (query, variables, documentId) => {
   const res = await fetch("http://localhost:4000/graphql", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -153,17 +158,28 @@ const executor = async (query, variables, documentId) => {
   return data;
 };
 
-const server = new McpServer({ name: "my-mcp-server", version: "0.1.0" });
+function createMcpServer(): McpServer {
+  const server = new McpServer({ name: "my-graphql-mcp", version: "0.1.0" });
+  const tools = generatedMcpTools.map((t) => createToolFromGenerated(t, executor));
 
-const tools = generatedMcpTools.map((t) => createToolFromGenerated(t, executor));
-
-for (const tool of tools) {
-  server.tool(tool.name, tool.description, tool.inputSchema, async (args) => ({
-    content: [{ type: "text", text: JSON.stringify(await tool.handler(args), null, 2) }],
-  }));
+  for (const tool of tools) {
+    server.tool(tool.name, tool.description, tool.inputSchema, async (args) => ({
+      content: [{ type: "text", text: JSON.stringify(await tool.handler(args), null, 2) }],
+    }));
+  }
+  return server;
 }
 
-await server.connect(new StdioServerTransport());
+// Stateless HTTP — each request gets a fresh server + transport
+const httpServer = createServer(async (req, res) => {
+  const server = createMcpServer();
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  await server.connect(transport);
+  await transport.handleRequest(req, res);
+  res.on("close", () => { transport.close(); server.close(); });
+});
+
+httpServer.listen(3001);
 ```
 
 ## Connecting to Claude
@@ -179,12 +195,12 @@ Add this to your Claude Desktop config:
   "mcpServers": {
     "my-graphql-mcp": {
       "type": "url",
-      "url": "http://localhost:3001/mcp"
+      "url": "http://localhost:3001"
     }
   }
 }
 
-Or test with: npx @modelcontextprotocol/inspector --transport streamableHttp http://localhost:3001/mcp
+Or test with: npx @modelcontextprotocol/inspector --transport streamableHttp http://localhost:3001
 ```
 
 The port defaults to `3001` and can be changed via the `PORT` environment variable.
@@ -197,7 +213,7 @@ The codegen outputs `persisted-documents.json` mapping content hashes to query s
 
 ### Codegen (`src/codegen/`)
 
-- **`mcpToolTransform`** — Document transform that filters to `@mcpTool` operations
+- **`mcpToolTransform`** — Document transform that filters to `@mcpTool` operations and strips MCP directives from the output
 - **`plugin`** (in `tools-plugin.ts`) — Codegen plugin that generates tool definitions from persisted documents
 - **`stripMcpDirectives(query)`** — Strips `@mcpTool` / `@mcpToolVariable` from a query string
 
