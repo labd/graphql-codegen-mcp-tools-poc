@@ -42,7 +42,7 @@ The MCP service sits in front of the same GraphQL server your frontend uses. No 
 
 ## Step 1: Define your directives
 
-Two custom GraphQL directives are all you need (see [`src/directives.graphql`](https://github.com/labd/graphql-codegen-mcp-tools/blob/main/src/directives.graphql) in the repo):
+Two custom GraphQL directives (see [`src/directives.graphql`](https://github.com/labd/graphql-codegen-mcp-tools/blob/main/src/directives.graphql)):
 
 ```graphql
 directive @mcpTool(
@@ -135,17 +135,17 @@ mutation AddToCart(
 }
 ```
 
-These descriptions guide the LLM to call tools in the right order with the right arguments. Much better than scattering prompt instructions across your application code.
+These descriptions guide the LLM to call tools in the right order with the right arguments — and they live next to the operations they describe, not scattered across your application code.
 
 ## Step 3: The codegen pipeline
 
-Build time is where the pieces come together. We use [GraphQL Code Generator](https://the-guild.dev/graphql/codegen) with a custom document transform and plugin, both included in [`graphql-codegen-mcp-tools`](https://github.com/labd/graphql-codegen-mcp-tools). The pipeline does three things:
+We use [GraphQL Code Generator](https://the-guild.dev/graphql/codegen) with a custom document transform and plugin, both included in [`graphql-codegen-mcp-tools`](https://github.com/labd/graphql-codegen-mcp-tools). The pipeline does three things:
 
 1. **Filter** — A document transform walks your operations and keeps only the ones marked `@mcpTool`, along with any fragments they depend on. Everything else is discarded. Your `operations.graphql` can mix tool-exposed operations with internal ones (token refresh, session management) — only `@mcpTool` operations make it through.
 
 2. **Strip** — The same transform removes `@mcpTool` and `@mcpToolVariable` directives from the AST before output. The persisted documents that come out are plain GraphQL your server can execute directly, no custom directives attached.
 
-3. **Convert** — A tools plugin reads the persisted documents and your schema, then converts each operation into an MCP tool definition. GraphQL types map to JSON Schema: enums become `{ type: "string", enum: [...] }` with their descriptions, input objects become nested `{ type: "object", properties: {...} }`, lists become `{ type: "array", items: {...} }`. The LLM gets a validated schema for every tool input, which in practice drastically reduces hallucinated argument values.
+3. **Convert** — A tools plugin reads the persisted documents and your schema, then converts each operation into an MCP tool definition. GraphQL types map to JSON Schema: enums become `{ type: "string", enum: [...] }` with their descriptions, input objects become nested `{ type: "object", properties: {...} }`, lists become `{ type: "array", items: {...} }`. The LLM gets a validated schema for every tool input, so it stops making up argument values.
 
 ### What comes out
 
@@ -194,7 +194,7 @@ Tool names are derived from operation names (`GetProducts` → `get_products`). 
 
 ## Step 4: Runtime
 
-At runtime, each generated tool becomes an executable handler. You provide a `GraphQLExecutor` — a function that knows how to talk to your GraphQL server — and the runtime wrapper handles the rest.
+At runtime, each generated tool needs a `GraphQLExecutor` — a function that sends queries to your GraphQL server and returns the result.
 
 The executor is the only part that's specific to your infrastructure:
 
@@ -220,7 +220,7 @@ The executor receives the query string, the variables the LLM provided, and the 
 
 ### Wiring up the MCP server
 
-The [example server](https://github.com/labd/graphql-codegen-mcp-tools/blob/main/example/server.ts) runs a stateless Streamable HTTP server. Each incoming request gets a fresh `McpServer` instance, which keeps things simple and avoids session state management:
+The [example server](https://github.com/labd/graphql-codegen-mcp-tools/blob/main/example/server.ts) runs a stateless Streamable HTTP server — each incoming request gets a fresh `McpServer` instance, no session state to manage:
 
 ```typescript
 import { createServer } from "node:http";
@@ -278,7 +278,7 @@ The example in the repo includes a mock executor that returns realistic product 
 
 ## The safety model
 
-This is what makes the whole thing production-ready. Multiple layers of control, and they compound.
+Multiple layers of control, and they compound.
 
 ### Persisted documents as an allowlist
 
@@ -316,7 +316,7 @@ The codegen skips `exclude: true` operations in the tool output while still incl
 
 ### Authentication and rate limiting
 
-This is where your own infrastructure comes in. The MCP service should authenticate against your GraphQL server the same way your frontend does — typically with JWT tokens, API keys, or session cookies passed as headers in the executor.
+The MCP service authenticates against your GraphQL server the same way your frontend does — JWT tokens, API keys, or session cookies passed as headers in the executor.
 
 For rate limiting, apply limits per MCP session to prevent runaway loops. If you're running the MCP server over HTTP (Streamable HTTP transport), you can use the `Mcp-Session-Id` header as the rate limit key.
 
@@ -330,11 +330,11 @@ If your backend uses Apollo Federation or any other federation approach, the MCP
 
 A single MCP service covers your entire domain. Want to expose something from a new service? Add an operation to `operations.graphql` and run codegen. The federated supergraph schema feeds the `SchemaTypeResolver`, so enum values, input types, and descriptions all come straight from the source services.
 
-This works just as well with a non-federated GraphQL server. You just point your schema config at a single schema file or introspection endpoint instead of a supergraph.
+Non-federated? Same deal. Point your schema config at a single schema file or introspection endpoint instead of a supergraph.
 
 ## Getting started
 
-Clone the [`graphql-codegen-mcp-tools`](https://github.com/labd/graphql-codegen-mcp-tools) repo and try it end-to-end in under a minute:
+Clone the [`graphql-codegen-mcp-tools`](https://github.com/labd/graphql-codegen-mcp-tools) repo and run the example:
 
 ```bash
 git clone https://github.com/labd/graphql-codegen-mcp-tools.git
@@ -362,6 +362,14 @@ To point it at your own schema:
 
 ## What you end up with
 
-Your GraphQL operations define both what the AI can do and how. There's no drift between API and tool definitions because there's only one definition. GraphQL's type system converts to JSON Schema automatically, so enums, nested objects, and required fields are all validated before execution. And the same persisted document registry that governs your frontend queries can govern your AI tools too.
+Your GraphQL operations define both what the AI can do and how. No drift between API and tool definitions, because there's only one definition. GraphQL's type system converts to JSON Schema automatically — enums, nested objects, required fields — all validated before execution. The same persisted document registry that governs your frontend queries governs your AI tools.
 
-If you already have a GraphQL API, you're most of the way there. You don't need a separate tool definition layer. Your schema already is one.
+Most MCP implementations we've seen are hand-crafted tool definitions that duplicate logic already living in an API layer. If your API is typed and documented — and GraphQL is, by design — the tool definitions should be derived, not written.
+
+This isn't specific to e-commerce either. A CMS where the AI creates and publishes content. An internal tool where it queries dashboards and kicks off workflows. A logistics platform where it tracks shipments. The operations you'd write for MCP are the same ones you'd write for any other client. You're just deciding which subset the AI gets access to.
+
+The governance story is worth calling out separately. As AI assistants get access to more of your infrastructure, "what can this thing actually do?" becomes a question you need a clear answer to. With hand-written tools, that answer is scattered across code. Here, it's a single file: `operations.graphql`. Security review is a code review of that file and the persisted documents it produces.
+
+Nobody has fully figured out what production MCP deployments look like yet. But type safety, build-time validation, and operation allowlists are the kind of foundation you don't want to retrofit later. If you have a GraphQL API, most of the work is already done. Your schema is your tool definition layer — you just need the codegen to make it official.
+
+The code is at [`graphql-codegen-mcp-tools`](https://github.com/labd/graphql-codegen-mcp-tools).
