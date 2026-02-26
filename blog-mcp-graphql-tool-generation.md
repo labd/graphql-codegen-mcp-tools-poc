@@ -139,134 +139,28 @@ These descriptions guide the LLM to call tools in the right order with the right
 
 ## Step 3: The codegen pipeline
 
-Build time is where the pieces come together. We use [GraphQL Code Generator](https://the-guild.dev/graphql/codegen) with a custom document transform and plugin, both included in [`graphql-mcp-tools`](https://github.com/labd/graphql-mcp-tools).
+Build time is where the pieces come together. We use [GraphQL Code Generator](https://the-guild.dev/graphql/codegen) with a custom document transform and plugin, both included in [`graphql-mcp-tools`](https://github.com/labd/graphql-mcp-tools). The pipeline does three things:
 
-### Filtering operations
+1. **Filter** — A document transform walks your operations and keeps only the ones marked `@mcpTool`, along with any fragments they depend on. Everything else is discarded. Your `operations.graphql` can mix tool-exposed operations with internal ones (token refresh, session management) — only `@mcpTool` operations make it through.
 
-A document transform filters your operations to only include `@mcpTool`-annotated ones (along with any fragments they depend on), then strips the MCP directives from the AST so persisted documents contain clean, server-executable queries:
+2. **Strip** — The same transform removes `@mcpTool` and `@mcpToolVariable` directives from the AST before output. The persisted documents that come out are plain GraphQL your server can execute directly, no custom directives attached.
 
-```typescript
-const MCP_DIRECTIVES = new Set(["mcpTool", "mcpToolVariable"]);
+3. **Convert** — A tools plugin reads the persisted documents and your schema, then converts each operation into an MCP tool definition. GraphQL types map to JSON Schema: enums become `{ type: "string", enum: [...] }` with their descriptions, input objects become nested `{ type: "object", properties: {...} }`, lists become `{ type: "array", items: {...} }`. The LLM gets a validated schema for every tool input, which in practice drastically reduces hallucinated argument values.
 
-export const mcpToolTransform: Types.DocumentTransformObject = {
-  transform({ documents }) {
-    // Collect all fragments, then find which ones @mcpTool operations need
-    const allFragments = new Map<string, DefinitionNode>();
-    // ... (collect fragments, resolve dependencies)
+### What comes out
 
-    return documents
-      .map((doc) => {
-        if (!doc.document) return doc;
-        const filtered = doc.document.definitions.filter((def) => {
-          if (def.kind === Kind.OPERATION_DEFINITION) {
-            return def.directives?.some((d) => d.name.value === "mcpTool");
-          }
-          if (def.kind === Kind.FRAGMENT_DEFINITION) {
-            return requiredFragments.has(def.name.value);
-          }
-          return false;
-        });
-        if (filtered.length === 0) return undefined;
-
-        // Strip @mcpTool / @mcpToolVariable from the AST so persisted
-        // documents only contain server-executable queries
-        const strippedDocument = visit(
-          { ...doc.document, definitions: filtered },
-          {
-            Directive(node) {
-              if (MCP_DIRECTIVES.has(node.name.value)) return null;
-            },
-          },
-        );
-
-        return { ...doc, document: strippedDocument };
-      })
-      .filter(Boolean);
-  },
-};
-```
-
-Your `operations.graphql` can contain operations used internally by the MCP service (like token refresh) alongside the tool-exposed ones. Only `@mcpTool` operations end up in the generated output, and the directives themselves never reach your GraphQL server.
-
-### Generating persisted documents
-
-The `client-preset` generates `persisted-documents.json`, mapping content hashes to complete query strings with all fragments inlined. Because the document transform already stripped the MCP directives, these are plain GraphQL your server can execute directly:
+The codegen produces two artifacts. First, `persisted-documents.json` — a hash-to-query mapping with clean, directive-free queries:
 
 ```json
 {
-  "f8567d7e...": "query GetProducts($filters: [FacetFilterInput!], $page: Int!, ...) { productSearch(...) { ... } }",
-  "8a7edd50...": "mutation AddToCart($cartId: ID!, $lineItems: [CartLineItemInput!]!) { cartAddLineItems(...) { ... } }"
+  "f8567d7e...": "query GetProducts($filters: [FacetFilterInput!], $page: Int!, ...) { ... }",
+  "8a7edd50...": "mutation AddToCart($cartId: ID!, $lineItems: [CartLineItemInput!]!) { ... }"
 }
 ```
 
-### Converting GraphQL types to JSON Schema
-
-At the core of the tool generation sits a `SchemaTypeResolver` that recursively converts GraphQL types into JSON Schema (the format MCP uses for tool input validation):
+Second, `mcp-tools.generated.ts` with typed tool definitions. This is what the `GetProducts` operation turns into:
 
 ```typescript
-class SchemaTypeResolver {
-  private schema: GraphQLSchema;
-
-  resolveType(type: GraphQLType): Record<string, unknown> {
-    if (isNonNullType(type)) return this.resolveType(type.ofType);
-    if (isListType(type)) {
-      return { type: "array", items: this.resolveType(type.ofType) };
-    }
-    if (isScalarType(type)) return this.scalarToJsonSchema(type.name);
-    if (isEnumType(type)) return this.enumToJsonSchema(type);
-    if (isInputObjectType(type)) return this.inputObjectToJsonSchema(type);
-    return { type: "string" };
-  }
-
-  private enumToJsonSchema(enumType: GraphQLEnumType) {
-    const values = enumType.getValues();
-    return {
-      type: "string",
-      enum: values.map((v) => v.name),
-      description: values
-        .filter((v) => v.description)
-        .map((v) => `${v.name}: ${v.description}`)
-        .join("; "),
-    };
-  }
-
-  private inputObjectToJsonSchema(inputType: GraphQLInputObjectType) {
-    const fields = inputType.getFields();
-    const properties: Record<string, unknown> = {};
-    const required: string[] = [];
-
-    for (const [name, field] of Object.entries(fields)) {
-      properties[name] = this.resolveType(field.type);
-      if (isNonNullType(field.type) && field.defaultValue === undefined) {
-        required.push(name);
-      }
-    }
-
-    return { type: "object", properties, ...(required.length && { required }) };
-  }
-}
-```
-
-GraphQL enums become `{ type: "string", enum: [...] }`, input objects become nested `{ type: "object", properties: {...} }`, lists become `{ type: "array", items: {...} }`. The LLM gets a rich, validated schema for every tool input. In practice this drastically reduces cases where the model makes up argument values.
-
-### The generated output
-
-The tool plugin produces a TypeScript file:
-
-```typescript
-export type GeneratedMCPTool = {
-  name: string;
-  description: string;
-  operationType: "query" | "mutation";
-  inputSchema: {
-    type: "object";
-    properties: Record<string, unknown>;
-    required: string[];
-  };
-  documentId: string;
-  queryString: string;
-};
-
 export const generatedMcpTools: GeneratedMCPTool[] = [
   {
     name: "get_products",
@@ -289,81 +183,14 @@ export const generatedMcpTools: GeneratedMCPTool[] = [
       },
       required: ["sort", "pageSize", "page"],
     },
-    documentId: "a1b2c3d4e5f6",
+    documentId: "f8567d7e...",
     queryString: "query GetProducts($sort: ProductSortOrder!, ...) { ... }",
   },
   // ... more tools
 ];
 ```
 
-Tool names are derived from operation names (`GetProducts` → `get_products`). Descriptions come from the directive. The `documentId` is the persisted document hash you can use at runtime for registry lookups, and `queryString` is the full query with MCP directives stripped out.
-
-### Codegen configuration
-
-The codegen runs in two sequential steps. First, the `client-preset` generates `persisted-documents.json`. Then the tools plugin reads those persisted documents and generates typed tool definitions. They need to run in order because the tools plugin needs the persisted documents file to exist.
-
-Step 1 — generate persisted documents:
-
-```typescript
-// codegen.ts
-import type { CodegenConfig } from "@graphql-codegen/cli";
-import { mcpToolTransform } from "./src/codegen/index.js";
-
-const config: CodegenConfig = {
-  schema: [
-    "./schema.graphql",         // your GraphQL schema
-    "./src/directives.graphql", // MCP directives
-  ],
-  generates: {
-    "./generated/": {
-      documents: ["./operations.graphql"],
-      preset: "client",
-      documentTransforms: [mcpToolTransform],
-      presetConfig: {
-        persistedDocuments: {
-          mode: "embedHashInDocument",
-          hashPropertyName: "documentId",
-        },
-      },
-    },
-  },
-};
-
-export default config;
-```
-
-Step 2 — generate tool definitions. The tools plugin calls into graphql-codegen's plugin API programmatically, which avoids module resolution issues with TypeScript source files:
-
-```typescript
-// generate-tools.ts
-import { readFileSync, writeFileSync } from "node:fs";
-import { buildSchema } from "graphql";
-import { plugin } from "./src/codegen/tools-plugin.js";
-
-const schema = buildSchema(
-  readFileSync("./schema.graphql", "utf-8") + "\n" +
-  readFileSync("./src/directives.graphql", "utf-8")
-);
-
-const output = plugin(schema, [], {
-  persistedDocumentsPath: "./generated/persisted-documents.json",
-});
-
-writeFileSync(
-  "./generated/mcp-tools.generated.ts",
-  typeof output === "string" ? output : output.content,
-);
-```
-
-Wire them together in your `package.json`:
-
-```json
-{
-  "scripts": {
-    "codegen": "graphql-codegen --config codegen.ts && tsx generate-tools.ts"
-  }
-}
-```
+Tool names are derived from operation names (`GetProducts` → `get_products`). Descriptions come from the directive. The `documentId` is the persisted document hash for registry lookups at runtime, and `queryString` is the full query with MCP directives stripped out. The source code for the transform, plugin, and type resolver is all in the repo — have a look at `src/codegen/` if you want the details.
 
 ## Step 4: Runtime
 
