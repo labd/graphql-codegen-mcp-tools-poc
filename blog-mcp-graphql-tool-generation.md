@@ -12,31 +12,7 @@ We've open-sourced the codegen tooling as [`graphql-codegen-mcp-tools`](https://
 
 ## The architecture
 
-```
-┌─────────────────────┐
-│    AI Assistant      │  (Claude Desktop, chat widget, etc.)
-│    (MCP Client)      │
-└──────────┬──────────┘
-           │ stdio / Streamable HTTP
-           ▼
-┌─────────────────────────────────────────┐
-│         MCP Service                     │
-│   (generated tools + session mgmt)      │
-└─────────────────────┬───────────────────┘
-                      │ HTTP POST /graphql
-                      │ (persisted document ID)
-                      ▼
-         ┌─────────────────────────┐
-         │   GraphQL Server        │
-         │   (single schema or     │
-         │    federated gateway)   │
-         └──────────┬──────────────┘
-                    │
-                    ▼
-         ┌──────────────────────────────────┐
-         │  Your backend / microservices    │
-         └──────────────────────────────────┘
-```
+![Architecture diagram](./architecture.svg)
 
 The MCP service sits in front of the same GraphQL server your frontend uses. No special access, no backdoors. It sends the same persisted queries, authenticated through the same token system. The AI is just another client, one that happens to speak MCP instead of HTTP.
 

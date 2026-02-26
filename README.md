@@ -4,6 +4,8 @@ Generate [MCP](https://modelcontextprotocol.io/) tool definitions from your Grap
 
 This repo is the companion code for the blog post [Generating MCP tools from your GraphQL schema](https://labdigital.nl/blog/generating-mcp-tools-from-graphql). The article walks through the architecture, codegen pipeline, and safety model in detail. The code here is everything you need to try it yourself.
 
+![Architecture diagram](./architecture.svg)
+
 ## How it works
 
 1. Mark GraphQL operations with `@mcpTool` and `@mcpToolVariable` directives
