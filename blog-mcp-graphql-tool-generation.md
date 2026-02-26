@@ -362,6 +362,14 @@ To point it at your own schema:
 
 ## What you end up with
 
-Your GraphQL operations define both what the AI can do and how. There's no drift between API and tool definitions because there's only one definition. GraphQL's type system converts to JSON Schema automatically, so enums, nested objects, and required fields are all validated before execution. And the same persisted document registry that governs your frontend queries can govern your AI tools too.
+Your GraphQL operations define both what the AI can do and how. No drift between API and tool definitions, because there's only one definition. GraphQL's type system converts to JSON Schema automatically — enums, nested objects, required fields — all validated before execution. The same persisted document registry that governs your frontend queries governs your AI tools.
 
-If you already have a GraphQL API, you're most of the way there. You don't need a separate tool definition layer. Your schema already is one.
+Most MCP implementations we've seen are hand-crafted tool definitions that duplicate logic already living in an API layer. If your API is typed and documented — and GraphQL is, by design — the tool definitions should be derived, not written.
+
+This isn't specific to e-commerce either. A CMS where the AI creates and publishes content. An internal tool where it queries dashboards and kicks off workflows. A logistics platform where it tracks shipments. The operations you'd write for MCP are the same ones you'd write for any other client. You're just deciding which subset the AI gets access to.
+
+The governance story is worth calling out separately. As AI assistants get access to more of your infrastructure, "what can this thing actually do?" becomes a question you need a clear answer to. With hand-written tools, that answer is scattered across code. Here, it's a single file: `operations.graphql`. Security review is a code review of that file and the persisted documents it produces.
+
+Nobody has fully figured out what production MCP deployments look like yet. But type safety, build-time validation, and operation allowlists are the kind of foundation you don't want to retrofit later. If you have a GraphQL API, most of the work is already done. Your schema is your tool definition layer — you just need the codegen to make it official.
+
+The code is at [`graphql-codegen-mcp-tools`](https://github.com/labd/graphql-codegen-mcp-tools).
