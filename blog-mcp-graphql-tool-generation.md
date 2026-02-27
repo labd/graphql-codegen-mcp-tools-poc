@@ -254,7 +254,7 @@ The example in the repo includes a mock executor that returns realistic product 
 
 ## The safety model
 
-Multiple layers of control, and they compound.
+Giving an AI access to your APIs raises an obvious question: how do you stop it from doing things it shouldn't? Hand-written MCP tools tend to push that problem into application code — ad-hoc checks scattered across handlers. We wanted something more systematic. The GraphQL codegen approach gives us multiple layers of control, and they compound.
 
 ### Persisted documents as an allowlist
 
