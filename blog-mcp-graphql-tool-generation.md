@@ -111,7 +111,7 @@ mutation AddToCart(
 }
 ```
 
-These descriptions guide the LLM to call tools in the right order with the right arguments — and they live next to the operations they describe, not scattered across your application code.
+These descriptions guide the LLM to call tools in the right order with the right arguments. And they live next to the operations they describe, not scattered across your application code.
 
 ## Step 3: The codegen pipeline
 
@@ -125,7 +125,7 @@ We use [GraphQL Code Generator](https://the-guild.dev/graphql/codegen) with a cu
 
 ### What comes out
 
-The codegen produces two artifacts. First, `persisted-documents.json` — a hash-to-query mapping with clean, directive-free queries:
+The codegen produces two artifacts. First, `persisted-documents.json`, a hash-to-query mapping with clean, directive-free queries:
 
 ```json
 {
@@ -170,7 +170,7 @@ Tool names are derived from operation names (`GetProducts` → `get_products`). 
 
 ## Step 4: Runtime
 
-At runtime, each generated tool needs a `GraphQLExecutor` — a function that sends queries to your GraphQL server and returns the result.
+At runtime, each generated tool needs a `GraphQLExecutor`: a function that sends queries to your GraphQL server and returns the result.
 
 The executor is the only part that's specific to your infrastructure:
 
@@ -196,7 +196,7 @@ The executor receives the query string, the variables the LLM provided, and the 
 
 ### Wiring up the MCP server
 
-The [example server](https://github.com/labd/graphql-codegen-mcp-tools/blob/main/example/server.ts) runs a stateless Streamable HTTP server — each incoming request gets a fresh `McpServer` instance, no session state to manage:
+The [example server](https://github.com/labd/graphql-codegen-mcp-tools/blob/main/example/server.ts) runs a stateless Streamable HTTP server. Each incoming request gets a fresh `McpServer` instance, no session state to manage:
 
 ```typescript
 import { createServer } from "node:http";
@@ -250,11 +250,11 @@ Add this to your Claude Desktop config:
 }
 ```
 
-The example in the repo includes a mock executor that returns realistic product and cart data, so you can test the full flow — codegen, server startup, tool execution — without standing up a GraphQL backend.
+The example in the repo includes a mock executor that returns realistic product and cart data, so you can test the full flow (codegen, server startup, tool execution) without standing up a GraphQL backend.
 
 ## The safety model
 
-Multiple layers of control, and they compound.
+Giving an AI access to your APIs raises an obvious question: how do you stop it from doing things it shouldn't? Hand-written MCP tools tend to push that problem into application code, ad-hoc checks scattered across handlers. We wanted something more systematic. The GraphQL codegen approach gives us multiple layers of control, and they compound.
 
 ### Persisted documents as an allowlist
 
@@ -292,7 +292,7 @@ The codegen skips `exclude: true` operations in the tool output while still incl
 
 ### Authentication and rate limiting
 
-The MCP service authenticates against your GraphQL server the same way your frontend does — JWT tokens, API keys, or session cookies passed as headers in the executor.
+The MCP service authenticates against your GraphQL server the same way your frontend does. JWT tokens, API keys, or session cookies, passed as headers in the executor.
 
 For rate limiting, apply limits per MCP session to prevent runaway loops. If you're running the MCP server over HTTP (Streamable HTTP transport), you can use the `Mcp-Session-Id` header as the rate limit key.
 
@@ -338,14 +338,20 @@ To point it at your own schema:
 
 ## What you end up with
 
-Your GraphQL operations define both what the AI can do and how. No drift between API and tool definitions, because there's only one definition. GraphQL's type system converts to JSON Schema automatically — enums, nested objects, required fields — all validated before execution. The same persisted document registry that governs your frontend queries governs your AI tools.
+One definition drives everything. The GraphQL operation is the tool. Its types become the JSON Schema the LLM validates against. Its persisted document hash is the allowlist entry your server enforces. No separate tool layer to maintain.
 
-Most MCP implementations we've seen are hand-crafted tool definitions that duplicate logic already living in an API layer. If your API is typed and documented — and GraphQL is, by design — the tool definitions should be derived, not written.
+We built this for e-commerce, but the pattern doesn't care about your domain. A CMS, an internal dashboard, a logistics backend. Any GraphQL API works. The operations you'd write for MCP are the same ones you'd write for a React app or a mobile client. You're just choosing which subset the AI gets.
 
-This isn't specific to e-commerce either. A CMS where the AI creates and publishes content. An internal tool where it queries dashboards and kicks off workflows. A logistics platform where it tracks shipments. The operations you'd write for MCP are the same ones you'd write for any other client. You're just deciding which subset the AI gets access to.
+What we like about this setup is that the decisions are explicit and reviewable. `operations.graphql` is both the implementation and the documentation. When someone asks "what can the AI do?", you point them at that file and the persisted documents it produces. Compare that to hand-written tool handlers where the answer requires reading through every handler, checking what each one calls, and hoping nothing was missed.
 
-The governance story is worth calling out separately. As AI assistants get access to more of your infrastructure, "what can this thing actually do?" becomes a question you need a clear answer to. With hand-written tools, that answer is scattered across code. Here, it's a single file: `operations.graphql`. Security review is a code review of that file and the persisted documents it produces.
+Adding a new tool is cheap. Write the operation, annotate it, run codegen. The JSON Schema, the persisted document hash, the type-safe handler: all generated. Removing a tool is deleting the operation and running codegen again. That low friction matters because you'll want to iterate on what the AI can do as you learn what works in practice.
 
-Nobody has fully figured out what production MCP deployments look like yet. But type safety, build-time validation, and operation allowlists are the kind of foundation you don't want to retrofit later. If you have a GraphQL API, most of the work is already done. Your schema is your tool definition layer — you just need the codegen to make it official.
+We started with product search and cart operations. But the pipeline doesn't stop there. Order management, customer service lookups, inventory checks, returns. Stack enough of those together and you're not building a demo anymore. You're building a customer service agent that operates through the same governed channel as your storefront.
 
-The code is at [`graphql-codegen-mcp-tools`](https://github.com/labd/graphql-codegen-mcp-tools).
+That's where agentic workflows come in. An AI plans a multi-step process: find product, check availability, apply discount, add to cart. Each step is a validated, allowlisted GraphQL operation. It can chain them freely because the schema constrains what's possible and the allowlist constrains what's permitted. No risk of it constructing arbitrary queries.
+
+If you're running a federated architecture, there's an ownership angle too. Different teams own different subgraphs. Each team writes and maintains their own MCP operations against their slice of the schema. The codegen sees the composed supergraph. It doesn't care where the types come from. Scaling this across an organization follows the same model you already have for your GraphQL services. No central MCP team required.
+
+Production MCP is still new ground. We'd rather build on type safety and build-time validation now than bolt them on later. The codegen handles the tedious parts; you handle the decisions about what to expose.
+
+Code is at [`graphql-codegen-mcp-tools`](https://github.com/labd/graphql-codegen-mcp-tools).
