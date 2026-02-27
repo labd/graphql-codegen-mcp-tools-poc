@@ -338,14 +338,10 @@ To point it at your own schema:
 
 ## What you end up with
 
-Your GraphQL operations define both what the AI can do and how. No drift between API and tool definitions, because there's only one definition. GraphQL's type system converts to JSON Schema automatically — enums, nested objects, required fields — all validated before execution. The same persisted document registry that governs your frontend queries governs your AI tools.
+One definition drives everything. The GraphQL operation is the tool. Its types become the JSON Schema the LLM validates against. Its persisted document hash is the allowlist entry your server enforces. No separate tool layer to maintain.
 
-Most MCP implementations we've seen are hand-crafted tool definitions that duplicate logic already living in an API layer. If your API is typed and documented — and GraphQL is, by design — the tool definitions should be derived, not written.
+We built this for e-commerce, but the pattern doesn't care about your domain. If you have a GraphQL API and you want to let an AI call parts of it, the work is writing `operations.graphql` and deciding what goes in. That file is also your audit trail — when someone asks "what can the AI do?", the answer is a code review, not an archaeology project across handler files.
 
-This isn't specific to e-commerce either. A CMS where the AI creates and publishes content. An internal tool where it queries dashboards and kicks off workflows. A logistics platform where it tracks shipments. The operations you'd write for MCP are the same ones you'd write for any other client. You're just deciding which subset the AI gets access to.
+Production MCP is still new ground. We'd rather build on type safety and build-time validation now than bolt them on later. The codegen handles the tedious parts; you handle the decisions about what to expose.
 
-The governance story is worth calling out separately. As AI assistants get access to more of your infrastructure, "what can this thing actually do?" becomes a question you need a clear answer to. With hand-written tools, that answer is scattered across code. Here, it's a single file: `operations.graphql`. Security review is a code review of that file and the persisted documents it produces.
-
-Nobody has fully figured out what production MCP deployments look like yet. But type safety, build-time validation, and operation allowlists are the kind of foundation you don't want to retrofit later. If you have a GraphQL API, most of the work is already done. Your schema is your tool definition layer — you just need the codegen to make it official.
-
-The code is at [`graphql-codegen-mcp-tools`](https://github.com/labd/graphql-codegen-mcp-tools).
+Code is at [`graphql-codegen-mcp-tools`](https://github.com/labd/graphql-codegen-mcp-tools).
