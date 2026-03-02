@@ -1,29 +1,31 @@
 {
-	"name": "graphql-mcp-tools",
-	"version": "0.1.0",
-	"description": "Generate MCP tool definitions from GraphQL operations",
-	"type": "module",
-	"exports": {
-		".": "./src/index.ts",
-		"./codegen": "./src/codegen/index.ts",
-		"./codegen/tools": "./src/codegen/tools-plugin.ts",
-		"./runtime": "./src/runtime/index.ts",
-		"./directives.graphql": "./src/directives.graphql"
-	},
-	"scripts": {
-		"codegen": "graphql-codegen --config example/codegen.ts && tsx example/generate-tools.ts",
-		"example": "tsx example/server.ts"
-	},
-	"dependencies": {
-		"@modelcontextprotocol/sdk": "^1.12.1",
-		"change-case": "^5.4.4",
-		"graphql": "^16.10.0"
-	},
-	"devDependencies": {
-		"@graphql-codegen/cli": "^5.0.6",
-		"@graphql-codegen/client-preset": "^4.8.2",
-		"@graphql-codegen/plugin-helpers": "^5.1.0",
-		"tsx": "^4.19.4",
-		"typescript": "^5.8.2"
-	}
+  "name": "graphql-mcp-tools",
+  "version": "0.1.0",
+  "description": "Generate MCP tool definitions from GraphQL operations",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./codegen": "./src/codegen/index.ts",
+    "./codegen/tools": "./src/codegen/tools-plugin.ts",
+    "./runtime": "./src/runtime/index.ts",
+    "./directives.graphql": "./src/directives.graphql"
+  },
+  "scripts": {
+    "codegen": "graphql-codegen --config example/codegen.ts && tsx example/generate-tools.ts",
+    "example": "tsx example/server.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "change-case": "^5.4.4",
+    "graphql": "^16.10.0"
+  },
+  "devDependencies": {
+    "@graphql-codegen/cli": "^5.0.6",
+    "@graphql-codegen/client-preset": "^4.8.2",
+    "@graphql-codegen/plugin-helpers": "^5.1.0",
+    "@graphql-typed-document-node/core": "^3.2.0",
+    "@types/node": "^25.3.3",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.2"
+  }
 }

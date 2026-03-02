@@ -45,12 +45,10 @@ query GetProducts(
     @mcpToolVariable(description: "Sort order, e.g. 'relevance'")
   $filters: [FacetFilterInput!]
     @mcpToolVariable(description: "Filters like category or brand")
-  $searchTerm: String
-    @mcpToolVariable(description: "Free-text search query")
+  $searchTerm: String @mcpToolVariable(description: "Free-text search query")
   $pageSize: Int!
     @mcpToolVariable(description: "Number of products per page, e.g. 24")
-  $page: Int!
-    @mcpToolVariable(description: "Page number, starting at 1")
+  $page: Int! @mcpToolVariable(description: "Page number, starting at 1")
 ) @mcpTool(description: "Search products with filters and sorting") {
   productSearch(
     sort: $sort
@@ -221,12 +219,24 @@ import { generatedMcpTools } from "./generated/mcp-tools.generated.js";
 function createMcpServer(): McpServer {
   const server = new McpServer({ name: "my-graphql-mcp", version: "0.1.0" });
 
-  const tools = generatedMcpTools.map((t) => createToolFromGenerated(t, executor));
+  const tools = generatedMcpTools.map((t) =>
+    createToolFromGenerated(t, executor),
+  );
 
   for (const tool of tools) {
-    server.tool(tool.name, tool.description, tool.inputSchema, async (args) => ({
-      content: [{ type: "text", text: JSON.stringify(await tool.handler(args), null, 2) }],
-    }));
+    server.tool(
+      tool.name,
+      tool.description,
+      tool.inputSchema,
+      async (args) => ({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(await tool.handler(args), null, 2),
+          },
+        ],
+      }),
+    );
   }
 
   return server;
@@ -249,22 +259,16 @@ const httpServer = createServer(async (req, res) => {
 httpServer.listen(3001);
 ```
 
-Start it and you'll get the connection config printed to the console:
+To connect from Claude Desktop, run the MCP server and then expose it over HTTPS via ngrok:
 
+```bash
+pnpm example
+ngrok http 3001
 ```
-MCP server running with 5 tools
 
-Add this to your Claude Desktop config:
+Copy the `https://...` forwarding URL from ngrok and set it in Claude Desktop as a **Remote MCP server**.
 
-{
-  "mcpServers": {
-    "my-graphql-mcp": {
-      "type": "url",
-      "url": "http://localhost:3001"
-    }
-  }
-}
-```
+Setup guide: [Get started with custom connectors using remote MCP](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp)
 
 The example in the repo includes a mock executor that returns realistic product and cart data, so you can test the full flow (codegen, server startup, tool execution) without starting up a GraphQL backend.
 
