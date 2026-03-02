@@ -68,14 +68,21 @@ query GetProducts(
         name
         availability
         price {
-          gross { centAmount currency }
+          gross {
+            centAmount
+            currency
+          }
         }
       }
     }
     facets {
       key
       label
-      options { key label count }
+      options {
+        key
+        label
+        count
+      }
     }
   }
 }
@@ -103,7 +110,10 @@ mutation AddToCart(
       lineItems {
         id
         quantity
-        variant { sku name }
+        variant {
+          sku
+          name
+        }
       }
     }
     errors
@@ -148,14 +158,17 @@ export const generatedMcpTools: GeneratedMCPTool[] = [
         sort: {
           type: "string",
           enum: ["relevance", "price_asc", "price_desc", "name_asc"],
-          description: "Sort order, e.g. 'relevance'"
+          description: "Sort order, e.g. 'relevance'",
         },
         searchTerm: {
           type: "string",
-          description: "Free-text search query"
+          description: "Free-text search query",
         },
-        pageSize: { type: "integer", description: "Number of products per page" },
-        page: { type: "integer", description: "Page number, starting at 1" }
+        pageSize: {
+          type: "integer",
+          description: "Number of products per page",
+        },
+        page: { type: "integer", description: "Page number, starting at 1" },
       },
       required: ["sort", "pageSize", "page"],
     },
@@ -227,7 +240,10 @@ const httpServer = createServer(async (req, res) => {
 
   await server.connect(transport);
   await transport.handleRequest(req, res);
-  res.on("close", () => { transport.close(); server.close(); });
+  res.on("close", () => {
+    transport.close();
+    server.close();
+  });
 });
 
 httpServer.listen(3001);
@@ -250,7 +266,7 @@ Add this to your Claude Desktop config:
 }
 ```
 
-The example in the repo includes a mock executor that returns realistic product and cart data, so you can test the full flow (codegen, server startup, tool execution) without standing up a GraphQL backend.
+The example in the repo includes a mock executor that returns realistic product and cart data, so you can test the full flow (codegen, server startup, tool execution) without starting up a GraphQL backend.
 
 ## The safety model
 
@@ -279,12 +295,14 @@ You control what data the AI sees by crafting your selection sets. A `GetProduct
 
 ### The `exclude` flag
 
-Some operations need to exist in the codebase for token refresh or session management but should never show up as tools:
+Some operations need to exist in the codebase for token refresh or session management but should never show up as MCP tools:
 
 ```graphql
 mutation RefreshToken
 @mcpTool(description: "Internal token refresh", exclude: true) {
-  refreshToken { accessToken }
+  refreshToken {
+    accessToken
+  }
 }
 ```
 
