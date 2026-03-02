@@ -1,4 +1,4 @@
-# graphql-mcp-tools
+# graphql-codegen-mcp-tools
 
 Generate [MCP](https://modelcontextprotocol.io/) tool definitions from your GraphQL operations. Annotate queries and mutations with `@mcpTool`, run codegen, get type-safe tools with JSON Schema inputs derived from your GraphQL schema.
 
