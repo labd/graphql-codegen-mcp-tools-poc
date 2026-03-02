@@ -41,13 +41,13 @@ pnpm example
 
 Copy or adapt the files from this repo into your project. The key pieces are:
 
-| What | Where |
-|------|-------|
-| Directives | `src/directives.graphql` |
-| Document transform | `src/codegen/document-transform.ts` |
-| Tools codegen plugin | `src/codegen/tools-plugin.ts` |
-| Directive stripping | `src/codegen/strip-directives.ts` |
-| Runtime tool wrapper | `src/runtime/create-tools.ts` |
+| What                 | Where                               |
+| -------------------- | ----------------------------------- |
+| Directives           | `src/directives.graphql`            |
+| Document transform   | `src/codegen/document-transform.ts` |
+| Tools codegen plugin | `src/codegen/tools-plugin.ts`       |
+| Directive stripping  | `src/codegen/strip-directives.ts`   |
+| Runtime tool wrapper | `src/runtime/create-tools.ts`       |
 
 You'll also need these dependencies:
 
@@ -73,16 +73,24 @@ directive @mcpToolVariable(description: String) on VARIABLE_DEFINITION
 
 ```graphql
 query GetProducts(
-  $searchTerm: String
-    @mcpToolVariable(description: "Free-text search query")
-  $pageSize: Int!
-    @mcpToolVariable(description: "Number of products per page")
-  $page: Int!
-    @mcpToolVariable(description: "Page number, starting at 1")
+  $searchTerm: String @mcpToolVariable(description: "Free-text search query")
+  $pageSize: Int! @mcpToolVariable(description: "Number of products per page")
+  $page: Int! @mcpToolVariable(description: "Page number, starting at 1")
 ) @mcpTool(description: "Search products in the catalog") {
   productSearch(searchTerm: $searchTerm, pageSize: $pageSize, page: $page) {
     total
-    results { name variant { sku price { gross { centAmount currency } } } }
+    results {
+      name
+      variant {
+        sku
+        price {
+          gross {
+            centAmount
+            currency
+          }
+        }
+      }
+    }
   }
 }
 ```
@@ -101,7 +109,7 @@ import { mcpToolTransform } from "./src/codegen/index.js";
 
 const config: CodegenConfig = {
   schema: [
-    "./schema.graphql",         // your schema
+    "./schema.graphql", // your schema
     "./src/directives.graphql", // MCP directives
   ],
   generates: {
@@ -162,12 +170,24 @@ const executor: GraphQLExecutor = async (query, variables, documentId) => {
 
 function createMcpServer(): McpServer {
   const server = new McpServer({ name: "my-graphql-mcp", version: "0.1.0" });
-  const tools = generatedMcpTools.map((t) => createToolFromGenerated(t, executor));
+  const tools = generatedMcpTools.map((t) =>
+    createToolFromGenerated(t, executor),
+  );
 
   for (const tool of tools) {
-    server.tool(tool.name, tool.description, tool.inputSchema, async (args) => ({
-      content: [{ type: "text", text: JSON.stringify(await tool.handler(args), null, 2) }],
-    }));
+    server.tool(
+      tool.name,
+      tool.description,
+      tool.inputSchema,
+      async (args) => ({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(await tool.handler(args), null, 2),
+          },
+        ],
+      }),
+    );
   }
   return server;
 }
@@ -175,10 +195,15 @@ function createMcpServer(): McpServer {
 // Stateless HTTP — each request gets a fresh server + transport
 const httpServer = createServer(async (req, res) => {
   const server = createMcpServer();
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+  });
   await server.connect(transport);
   await transport.handleRequest(req, res);
-  res.on("close", () => { transport.close(); server.close(); });
+  res.on("close", () => {
+    transport.close();
+    server.close();
+  });
 });
 
 httpServer.listen(3001);
@@ -186,23 +211,30 @@ httpServer.listen(3001);
 
 ## Connecting to Claude
 
-The example server runs as a remote MCP server over HTTP. Start it with `pnpm example` and it will print the configuration you need:
+The example server runs locally on HTTP (`http://localhost:3001`), but Claude Desktop needs a public HTTPS endpoint.
 
+1. Start the MCP server:
+
+```bash
+pnpm example
 ```
-MCP server running with 5 tools
 
-Add this to your Claude Desktop config:
+2. In another terminal, expose it with ngrok:
 
-{
-  "mcpServers": {
-    "my-graphql-mcp": {
-      "type": "url",
-      "url": "http://localhost:3001"
-    }
-  }
-}
+```bash
+ngrok http 3001
+```
 
-Or test with: npx @modelcontextprotocol/inspector --transport streamableHttp http://localhost:3001
+3. Copy the `https://...` forwarding URL from ngrok and use that in your Claude Desktop config.
+
+4. In Claude Desktop, add that ngrok URL as a **Remote MCP server**.
+
+   See: [Get started with custom connectors using remote MCP](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp)
+
+Or test locally with:
+
+```bash
+mcp-inspector --transport http http://localhost:3001
 ```
 
 The port defaults to `3001` and can be changed via the `PORT` environment variable.
