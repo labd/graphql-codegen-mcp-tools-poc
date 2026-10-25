@@ -10,6 +10,7 @@
     "./runtime": "./src/runtime/index.ts",
     "./directives.graphql": "./src/directives.graphql"
   },
+  "packageManager": "pnpm@12.12.0",
   "scripts": {
     "codegen": "graphql-codegen --config example/codegen.ts && tsx example/generate-tools.ts",
     "example": "tsx example/server.ts"
