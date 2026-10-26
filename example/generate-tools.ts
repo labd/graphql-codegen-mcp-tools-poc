@@ -5,7 +5,7 @@
  * Usage: tsx example/generate-tools.ts
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildSchema } from "graphql";
 import { plugin } from "../src/codegen/tools-plugin.js";
