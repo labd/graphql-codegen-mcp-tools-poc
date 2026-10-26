@@ -1,4 +1,8 @@
-import type { ExecutableMCPTool, GeneratedMCPTool, GraphQLExecutor } from "./types.js";
+import type {
+	ExecutableMCPTool,
+	GeneratedMCPTool,
+	GraphQLExecutor,
+} from "./types.js";
 
 /**
  * Creates an executable MCP tool from a generated tool definition.

@@ -1,4 +1,8 @@
-export { mcpToolTransform, mcpToolsPlugin, stripMcpDirectives } from "./codegen/index.js";
+export {
+	mcpToolsPlugin,
+	mcpToolTransform,
+	stripMcpDirectives,
+} from "./codegen/index.js";
 export {
 	createToolFromGenerated,
 	type ExecutableMCPTool,

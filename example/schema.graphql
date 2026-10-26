@@ -1,13 +1,21 @@
 # Example schema — replace with your own or point codegen at your gateway's schema.
 
 enum ProductSortOrder {
-	"""Sort by relevance"""
+	"""
+	Sort by relevance
+	"""
 	relevance
-	"""Sort by price ascending"""
+	"""
+	Sort by price ascending
+	"""
 	price_asc
-	"""Sort by price descending"""
+	"""
+	Sort by price descending
+	"""
 	price_desc
-	"""Sort by name A-Z"""
+	"""
+	Sort by name A-Z
+	"""
 	name_asc
 }
 
@@ -96,13 +104,12 @@ type Query {
 
 type Mutation {
 	cartAddLineItems(
-		"""Cart ID — get this from the cart query first"""
+		"""
+		Cart ID — get this from the cart query first
+		"""
 		cartId: ID!
 		lineItems: [CartLineItemInput!]!
 	): CartResult!
 
-	cartRemoveLineItems(
-		cartId: ID!
-		lineItemIds: [String!]!
-	): CartResult!
+	cartRemoveLineItems(cartId: ID!, lineItemIds: [String!]!): CartResult!
 }

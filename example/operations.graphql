@@ -6,12 +6,10 @@ query GetProducts(
 		@mcpToolVariable(description: "Sort order, e.g. 'relevance'")
 	$filters: [FacetFilterInput!]
 		@mcpToolVariable(description: "Filters like category or brand")
-	$searchTerm: String
-		@mcpToolVariable(description: "Free-text search query")
+	$searchTerm: String @mcpToolVariable(description: "Free-text search query")
 	$pageSize: Int!
 		@mcpToolVariable(description: "Number of products per page, e.g. 24")
-	$page: Int!
-		@mcpToolVariable(description: "Page number, starting at 1")
+	$page: Int! @mcpToolVariable(description: "Page number, starting at 1")
 ) @mcpTool(description: "Search products with filters and sorting") {
 	productSearch(
 		sort: $sort
@@ -29,14 +27,21 @@ query GetProducts(
 				name
 				availability
 				price {
-					gross { centAmount currency }
+					gross {
+						centAmount
+						currency
+					}
 				}
 			}
 		}
 		facets {
 			key
 			label
-			options { key label count }
+			options {
+				key
+				label
+				count
+			}
 		}
 	}
 }
@@ -52,8 +57,14 @@ query GetProductDetail(
 			name
 			availability
 			price {
-				gross { centAmount currency }
-				net { centAmount currency }
+				gross {
+					centAmount
+					currency
+				}
+				net {
+					centAmount
+					currency
+				}
 			}
 		}
 	}
@@ -68,9 +79,15 @@ query GetCart
 		lineItems {
 			id
 			quantity
-			variant { sku name }
+			variant {
+				sku
+				name
+			}
 		}
-		totalPrice { centAmount currency }
+		totalPrice {
+			centAmount
+			currency
+		}
 	}
 }
 
@@ -93,7 +110,10 @@ mutation AddToCart(
 			lineItems {
 				id
 				quantity
-				variant { sku name }
+				variant {
+					sku
+					name
+				}
 			}
 		}
 		errors
@@ -101,19 +121,20 @@ mutation AddToCart(
 }
 
 mutation RemoveFromCart(
-	$cartId: ID!
-		@mcpToolVariable(description: "Cart ID from get_cart")
+	$cartId: ID! @mcpToolVariable(description: "Cart ID from get_cart")
 	$lineItemIds: [String!]!
 		@mcpToolVariable(description: "IDs of line items to remove")
-)
-@mcpTool(description: "Remove items from the cart") {
+) @mcpTool(description: "Remove items from the cart") {
 	cartRemoveLineItems(cartId: $cartId, lineItemIds: $lineItemIds) {
 		cart {
 			id
 			lineItems {
 				id
 				quantity
-				variant { sku name }
+				variant {
+					sku
+					name
+				}
 			}
 		}
 		errors
