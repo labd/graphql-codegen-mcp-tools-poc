@@ -150,8 +150,12 @@ See `example/server.ts` for a full working example with mock data. The key parts
 
 ```typescript
 import { createServer } from "node:http";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import { createToolFromGenerated } from "./src/runtime/index.js";
 import type { GraphQLExecutor } from "./src/runtime/index.js";
 import { generatedMcpTools } from "./generated/mcp-tools.generated.js";
@@ -168,27 +172,42 @@ const executor: GraphQLExecutor = async (query, variables, documentId) => {
   return data;
 };
 
-function createMcpServer(): McpServer {
-  const server = new McpServer({ name: "my-graphql-mcp", version: "0.1.0" });
-  const tools = generatedMcpTools.map((t) =>
-    createToolFromGenerated(t, executor),
+// The generated tools describe their input as plain JSON Schema, so register
+// them with the low-level Server API (McpServer expects Zod schemas).
+function createMcpServer(): Server {
+  const server = new Server(
+    { name: "my-graphql-mcp", version: "0.1.0" },
+    { capabilities: { tools: {} } },
+  );
+  const tools = new Map(
+    generatedMcpTools.map((t) => {
+      const tool = createToolFromGenerated(t, executor);
+      return [tool.name, tool] as const;
+    }),
   );
 
-  for (const tool of tools) {
-    server.tool(
-      tool.name,
-      tool.description,
-      tool.inputSchema,
-      async (args) => ({
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(await tool.handler(args), null, 2),
-          },
-        ],
-      }),
-    );
-  }
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [...tools.values()].map(({ name, description, inputSchema }) => ({
+      name,
+      description,
+      inputSchema,
+    })),
+  }));
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const tool = tools.get(request.params.name);
+    if (!tool) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Unknown tool: ${request.params.name}` }],
+      };
+    }
+    const result = await tool.handler(request.params.arguments ?? {});
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+    };
+  });
+
   return server;
 }
 
