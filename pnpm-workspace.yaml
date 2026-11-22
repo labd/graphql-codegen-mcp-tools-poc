@@ -1,3 +1,5 @@
 allowBuilds:
   esbuild: false # postinstall not necessary for functionality, see https://github.com/evanw/esbuild/issues/4085
 minimumReleaseAge: 20160 # 14 days
+overrides:
+  minimatch@>=7.0.0 <11.0.1: ^11.0.1 # graphql-config pins minimatch ^10, see GHSA-g3hv-75wg-m249
